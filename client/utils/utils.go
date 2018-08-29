@@ -54,12 +54,13 @@ func SendTx(txCtx authctx.TxContext, cliCtx context.CLIContext, msgs []sdk.Msg) 
 }
 
 // SimulateMsgs simulates the transaction and returns the gas estimate and the adjusted value.
-func SimulateMsgs(txCtx authctx.TxContext, cliCtx context.CLIContext, name string, msgs []sdk.Msg, gas int64) (int64, int64, error) {
+func SimulateMsgs(txCtx authctx.TxContext, cliCtx context.CLIContext, name string, msgs []sdk.Msg, gas int64) (estimated, adjusted int64, err error) {
 	txBytes, err := txCtx.WithGas(gas).BuildWithPubKey(name, msgs)
 	if err != nil {
-		return 0, 0, err
+		return
 	}
-	return CalculateGas(cliCtx.Query, cliCtx.Codec, txBytes, cliCtx.GasAdjustment)
+	estimated, adjusted, err = CalculateGas(cliCtx.Query, cliCtx.Codec, txBytes, cliCtx.GasAdjustment)
+	return
 }
 
 // EnrichCtxWithGas calculates the gas estimate that would be consumed by the
