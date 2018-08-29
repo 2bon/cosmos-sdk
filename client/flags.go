@@ -5,7 +5,7 @@ import "github.com/spf13/cobra"
 // nolint
 const (
 	DefaultGasLimit      = 200000
-	DefaultGasAdjustment = 1.2
+	DefaultGasAdjustment = 1.0
 
 	FlagUseLedger     = "ledger"
 	FlagChainID       = "chain-id"

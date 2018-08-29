@@ -15,7 +15,7 @@ import (
 // DefaultGasAdjustment is applied to gas estimates to avoid tx
 // execution failures due to state changes that might
 // occur between the tx simulation and the actual run.
-const DefaultGasAdjustment = 1.2
+const DefaultGasAdjustment = 1.0
 
 // SendTx implements a auxiliary handler that facilitates sending a series of
 // messages in a signed transaction given a TxContext and a QueryContext. It
