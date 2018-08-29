@@ -147,7 +147,6 @@ func validateBasic(tx StdTx) (err sdk.Error) {
 
 // verify the signature and increment the sequence.
 // if the account doesn't have a pubkey, set it.
-// nolint: gocyclo
 func processSig(
 	ctx sdk.Context, am AccountMapper,
 	addr sdk.AccAddress, sig StdSignature, signBytes []byte, simulate bool) (
@@ -178,34 +177,48 @@ func processSig(
 	}
 	// If pubkey is not known for account,
 	// set it from the StdSignature.
-	pubKey := acc.GetPubKey()
-	if !simulate && (pubKey == nil) {
-		pubKey = sig.PubKey
-		if pubKey == nil {
-			return nil, sdk.ErrInvalidPubKey("PubKey not found").Result()
-		}
-		if !bytes.Equal(pubKey.Address(), addr) {
-			return nil, sdk.ErrInvalidPubKey(
-				fmt.Sprintf("PubKey does not match Signer address %v", addr)).Result()
-		}
-	}
-	if simulate && (pubKey == nil) {
-		// In case pubkey is nil, both signature verification and gasKVStore.Set()
-		// will consume the largest amount
-		pubKey = secp256k1.GenPrivKey().PubKey()
+	pubKey, res := processPubKey(acc, sig, simulate)
+	if !res.IsOK() {
+		return nil, res
 	}
 	err = acc.SetPubKey(pubKey)
 	if err != nil {
 		return nil, sdk.ErrInternal("setting PubKey on signer's account").Result()
 	}
 
-	// Check sig.
 	consumeSignatureVerificationGas(ctx.GasMeter(), pubKey)
 	if !simulate && !pubKey.VerifyBytes(signBytes, sig.Signature) {
 		return nil, sdk.ErrUnauthorized("signature verification failed").Result()
 	}
 
 	return
+}
+
+func processPubKey(acc Account, sig StdSignature, simulate bool) (crypto.PubKey, sdk.Result) {
+	// If pubkey is not known for account,
+	// set it from the StdSignature.
+	pubKey := acc.GetPubKey()
+	if simulate {
+		// In simulate mode the transaction comes with no signatures, thus
+		// if the account's pubkey is nil, both signature verification
+		// and gasKVStore.Set() shall consume the largest amount, i.e.
+		// it takes more gas to verifiy secp256k1 keys than ed25519 ones.
+		if pubKey == nil {
+			return secp256k1.GenPrivKey().PubKey(), sdk.Result{}
+		}
+		return pubKey, sdk.Result{}
+	}
+	if pubKey == nil {
+		pubKey = sig.PubKey
+		if pubKey == nil {
+			return nil, sdk.ErrInvalidPubKey("PubKey not found").Result()
+		}
+		if !bytes.Equal(pubKey.Address(), acc.GetAddress()) {
+			return nil, sdk.ErrInvalidPubKey(
+				fmt.Sprintf("PubKey does not match Signer address %v", acc.GetAddress())).Result()
+		}
+	}
+	return pubKey, sdk.Result{}
 }
 
 func consumeSignatureVerificationGas(meter sdk.GasMeter, pubkey crypto.PubKey) {
