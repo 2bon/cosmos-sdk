@@ -65,7 +65,7 @@ func NewAnteHandler(am AccountMapper, fck FeeCollectionKeeper) sdk.AnteHandler {
 			return newCtx, err.Result(), true
 		}
 
-		sigs := stdTx.GetSignatures()
+		sigs := stdTx.GetSignatures() // When simulating, this would just be a 0-length slice.
 		signerAddrs := stdTx.GetSigners()
 		msgs := tx.GetMsgs()
 		if simulate {
@@ -157,19 +157,25 @@ func processSig(
 		return nil, sdk.ErrUnknownAddress(addr.String()).Result()
 	}
 
-	// Check account number.
 	accnum := acc.GetAccountNumber()
-	if !simulate && (accnum != sig.AccountNumber) {
-		return nil, sdk.ErrInvalidSequence(
-			fmt.Sprintf("Invalid account number. Got %d, expected %d", sig.AccountNumber, accnum)).Result()
-	}
-
-	// Check and increment sequence number.
 	seq := acc.GetSequence()
-	if !simulate && (seq != sig.Sequence) {
-		return nil, sdk.ErrInvalidSequence(
-			fmt.Sprintf("Invalid sequence. Got %d, expected %d", sig.Sequence, seq)).Result()
+
+	// Perform checks that wouldn't pass succesfully in simulation, i.e. sig
+	// would be empty as simulated transactions come with no signatures whatsoever.
+	if !simulate {
+		// Check account number.
+		if accnum != sig.AccountNumber {
+			return nil, sdk.ErrInvalidSequence(
+				fmt.Sprintf("Invalid account number. Got %d, expected %d", sig.AccountNumber, accnum)).Result()
+		}
+
+		// Check sequence number.
+		if seq != sig.Sequence {
+			return nil, sdk.ErrInvalidSequence(
+				fmt.Sprintf("Invalid sequence. Got %d, expected %d", sig.Sequence, seq)).Result()
+		}
 	}
+	// Increment sequence number
 	err := acc.SetSequence(seq + 1)
 	if err != nil {
 		// Handle w/ #870
