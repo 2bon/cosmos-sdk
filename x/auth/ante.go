@@ -160,7 +160,7 @@ func processSig(
 	accnum := acc.GetAccountNumber()
 	seq := acc.GetSequence()
 
-	// Perform checks that wouldn't pass succesfully in simulation, i.e. sig
+	// Perform checks that wouldn't pass successfully in simulation, i.e. sig
 	// would be empty as simulated transactions come with no signatures whatsoever.
 	if !simulate {
 		// Check account number.
