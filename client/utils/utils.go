@@ -78,7 +78,7 @@ func SendTx(txCtx authctx.TxContext, cliCtx context.CLIContext, msgs []sdk.Msg) 
 // EnrichCtxWithGas calculates the gas estimate that would be consumed by the
 // transaction and set the transaction's respective value accordingly.
 func EnrichCtxWithGas(txCtx authctx.TxContext, cliCtx context.CLIContext, name string, msgs []sdk.Msg) (authctx.TxContext, error) {
-	txBytes, err := BuildAndSignTxWithZeroGas(txCtx, name, msgs)
+	txBytes, err := txCtx.WithGas(0).BuildWithPubKey(name, msgs)
 	if err != nil {
 		return txCtx, err
 	}
@@ -87,11 +87,6 @@ func EnrichCtxWithGas(txCtx authctx.TxContext, cliCtx context.CLIContext, name s
 		return txCtx, err
 	}
 	return txCtx.WithGas(adjusted), nil
-}
-
-// BuildAndSignTxWithZeroGas builds transactions with GasWanted set to 0.
-func BuildAndSignTxWithZeroGas(txCtx authctx.TxContext, name string, msgs []sdk.Msg) ([]byte, error) {
-	return txCtx.WithGas(0).BuildWithPubKey(name, msgs)
 }
 
 // CalculateGas simulates the execution of a transaction and returns
