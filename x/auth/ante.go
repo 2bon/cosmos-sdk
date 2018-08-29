@@ -68,6 +68,9 @@ func NewAnteHandler(am AccountMapper, fck FeeCollectionKeeper) sdk.AnteHandler {
 		sigs := stdTx.GetSignatures()
 		signerAddrs := stdTx.GetSigners()
 		msgs := tx.GetMsgs()
+		if simulate {
+			sigs = make([]StdSignature, len(signerAddrs))
+		}
 
 		// charge gas for the memo
 		newCtx.GasMeter().ConsumeGas(memoCostPerByte*sdk.Gas(len(stdTx.GetMemo())), "memo")
@@ -88,10 +91,7 @@ func NewAnteHandler(am AccountMapper, fck FeeCollectionKeeper) sdk.AnteHandler {
 
 			// check signature, return account with incremented nonce
 			signBytes := StdSignBytes(newCtx.ChainID(), accNums[i], sequences[i], fee, msgs, stdTx.GetMemo())
-			signerAcc, res := processSig(
-				newCtx, am,
-				signerAddr, sig, signBytes,
-			)
+			signerAcc, res := processSig(newCtx, am, signerAddr, sig, signBytes, simulate)
 			if !res.IsOK() {
 				return newCtx, res, true
 			}
@@ -147,11 +147,11 @@ func validateBasic(tx StdTx) (err sdk.Error) {
 
 // verify the signature and increment the sequence.
 // if the account doesn't have a pubkey, set it.
+// nolint: gocyclo
 func processSig(
 	ctx sdk.Context, am AccountMapper,
-	addr sdk.AccAddress, sig StdSignature, signBytes []byte) (
+	addr sdk.AccAddress, sig StdSignature, signBytes []byte, simulate bool) (
 	acc Account, res sdk.Result) {
-
 	// Get the account.
 	acc = am.GetAccount(ctx, addr)
 	if acc == nil {
@@ -160,14 +160,14 @@ func processSig(
 
 	// Check account number.
 	accnum := acc.GetAccountNumber()
-	if accnum != sig.AccountNumber {
+	if !simulate && (accnum != sig.AccountNumber) {
 		return nil, sdk.ErrInvalidSequence(
 			fmt.Sprintf("Invalid account number. Got %d, expected %d", sig.AccountNumber, accnum)).Result()
 	}
 
 	// Check and increment sequence number.
 	seq := acc.GetSequence()
-	if seq != sig.Sequence {
+	if !simulate && (seq != sig.Sequence) {
 		return nil, sdk.ErrInvalidSequence(
 			fmt.Sprintf("Invalid sequence. Got %d, expected %d", sig.Sequence, seq)).Result()
 	}
@@ -179,7 +179,7 @@ func processSig(
 	// If pubkey is not known for account,
 	// set it from the StdSignature.
 	pubKey := acc.GetPubKey()
-	if pubKey == nil {
+	if !simulate && (pubKey == nil) {
 		pubKey = sig.PubKey
 		if pubKey == nil {
 			return nil, sdk.ErrInvalidPubKey("PubKey not found").Result()
@@ -188,15 +188,20 @@ func processSig(
 			return nil, sdk.ErrInvalidPubKey(
 				fmt.Sprintf("PubKey does not match Signer address %v", addr)).Result()
 		}
-		err = acc.SetPubKey(pubKey)
-		if err != nil {
-			return nil, sdk.ErrInternal("setting PubKey on signer's account").Result()
-		}
+	}
+	if simulate && (pubKey == nil) {
+		// In case pubkey is nil, both signature verification and gasKVStore.Set()
+		// will consume the largest amount
+		pubKey = secp256k1.GenPrivKey().PubKey()
+	}
+	err = acc.SetPubKey(pubKey)
+	if err != nil {
+		return nil, sdk.ErrInternal("setting PubKey on signer's account").Result()
 	}
 
 	// Check sig.
 	consumeSignatureVerificationGas(ctx.GasMeter(), pubKey)
-	if !pubKey.VerifyBytes(signBytes, sig.Signature) {
+	if !simulate && !pubKey.VerifyBytes(signBytes, sig.Signature) {
 		return nil, sdk.ErrUnauthorized("signature verification failed").Result()
 	}
 

@@ -77,7 +77,7 @@ func signAndBuild(w http.ResponseWriter, cliCtx context.CLIContext, baseReq base
 	}
 
 	if baseReq.Gas == 0 {
-		newCtx, err := utils.EnrichCtxWithGas(txCtx, cliCtx, baseReq.Name, baseReq.Password, []sdk.Msg{msg})
+		newCtx, err := utils.EnrichCtxWithGas(txCtx, cliCtx, baseReq.Name, []sdk.Msg{msg})
 		if err != nil {
 			utils.WriteErrorResponse(&w, http.StatusInternalServerError, err.Error())
 			return

@@ -148,3 +148,30 @@ func (ctx TxContext) BuildAndSign(name, passphrase string, msgs []sdk.Msg) ([]by
 
 	return ctx.Sign(name, passphrase, msg)
 }
+
+// BuildWithPubKey builds a single message to be signed and
+// attach the public key associated to the given name.
+func (ctx TxContext) BuildWithPubKey(name string, msgs []sdk.Msg) ([]byte, error) {
+	msg, err := ctx.Build(msgs)
+	if err != nil {
+		return nil, err
+	}
+
+	keybase, err := keys.GetKeyBase()
+	if err != nil {
+		return nil, err
+	}
+
+	info, err := keybase.Get(name)
+	if err != nil {
+		return nil, err
+	}
+
+	sigs := []auth.StdSignature{{
+		AccountNumber: msg.AccountNumber,
+		Sequence:      msg.Sequence,
+		PubKey:        info.GetPubKey(),
+	}}
+
+	return ctx.Codec.MarshalBinary(auth.NewStdTx(msg.Msgs, msg.Fee, sigs, msg.Memo))
+}

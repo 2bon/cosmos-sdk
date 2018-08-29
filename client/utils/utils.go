@@ -54,16 +54,16 @@ func SendTx(txCtx authctx.TxContext, cliCtx context.CLIContext, msgs []sdk.Msg) 
 		txCtx = txCtx.WithSequence(accSeq)
 	}
 
-	passphrase, err := keys.GetPassphrase(cliCtx.FromAddressName)
-	if err != nil {
-		return err
-	}
-
 	if cliCtx.Gas == 0 {
-		txCtx, err = EnrichCtxWithGas(txCtx, cliCtx, cliCtx.FromAddressName, passphrase, msgs)
+		txCtx, err = EnrichCtxWithGas(txCtx, cliCtx, cliCtx.FromAddressName, msgs)
 		if err != nil {
 			return err
 		}
+	}
+
+	passphrase, err := keys.GetPassphrase(cliCtx.FromAddressName)
+	if err != nil {
+		return err
 	}
 
 	// build and sign the transaction
@@ -77,22 +77,21 @@ func SendTx(txCtx authctx.TxContext, cliCtx context.CLIContext, msgs []sdk.Msg) 
 
 // EnrichCtxWithGas calculates the gas estimate that would be consumed by the
 // transaction and set the transaction's respective value accordingly.
-func EnrichCtxWithGas(txCtx authctx.TxContext, cliCtx context.CLIContext, name, passphrase string, msgs []sdk.Msg) (authctx.TxContext, error) {
-	txBytes, err := BuildAndSignTxWithZeroGas(txCtx, name, passphrase, msgs)
+func EnrichCtxWithGas(txCtx authctx.TxContext, cliCtx context.CLIContext, name string, msgs []sdk.Msg) (authctx.TxContext, error) {
+	txBytes, err := BuildAndSignTxWithZeroGas(txCtx, name, msgs)
 	if err != nil {
 		return txCtx, err
 	}
-	estimate, adjusted, err := CalculateGas(cliCtx.Query, cliCtx.Codec, txBytes, cliCtx.GasAdjustment)
+	_, adjusted, err := CalculateGas(cliCtx.Query, cliCtx.Codec, txBytes, cliCtx.GasAdjustment)
 	if err != nil {
 		return txCtx, err
 	}
-	fmt.Fprintf(os.Stderr, "gas: [estimated = %v] [adjusted = %v]\n", estimate, adjusted)
 	return txCtx.WithGas(adjusted), nil
 }
 
 // BuildAndSignTxWithZeroGas builds transactions with GasWanted set to 0.
-func BuildAndSignTxWithZeroGas(txCtx authctx.TxContext, name, passphrase string, msgs []sdk.Msg) ([]byte, error) {
-	return txCtx.WithGas(0).BuildAndSign(name, passphrase, msgs)
+func BuildAndSignTxWithZeroGas(txCtx authctx.TxContext, name string, msgs []sdk.Msg) ([]byte, error) {
+	return txCtx.WithGas(0).BuildWithPubKey(name, msgs)
 }
 
 // CalculateGas simulates the execution of a transaction and returns
