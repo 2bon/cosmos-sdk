@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	queryArgDryRun = "dry_run"
+	queryArgDryRun = "simulate"
 )
 
 // WriteErrorResponse prepares and writes a HTTP error

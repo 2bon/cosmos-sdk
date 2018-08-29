@@ -270,7 +270,7 @@ func TestCoinSend(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, res.StatusCode, body)
 
 	// run simulation and test success with estimated gas
-	res, body, _ = doSendWithGas(t, port, seed, name, password, addr, 0, "?dry_run=true")
+	res, body, _ = doSendWithGas(t, port, seed, name, password, addr, 0, "?simulate=true")
 	require.Equal(t, http.StatusOK, res.StatusCode, body)
 	var responseBody struct {
 		GasEstimate int64 `json:"gas_estimate"`
