@@ -23,42 +23,20 @@ const DefaultGasAdjustment = 1.0
 // addition, it builds and signs a transaction with the supplied messages.
 // Finally, it broadcasts the signed transaction to a node.
 func SendTx(txCtx authctx.TxContext, cliCtx context.CLIContext, msgs []sdk.Msg) error {
-	if err := cliCtx.EnsureAccountExists(); err != nil {
-		return err
-	}
-
-	from, err := cliCtx.GetFromAddress()
+	txCtx, err := prepareTxContext(txCtx, cliCtx)
 	if err != nil {
 		return err
 	}
-
-	// TODO: (ref #1903) Allow for user supplied account number without
-	// automatically doing a manual lookup.
-	if txCtx.AccountNumber == 0 {
-		accNum, err := cliCtx.GetAccountNumber(from)
-		if err != nil {
-			return err
-		}
-
-		txCtx = txCtx.WithAccountNumber(accNum)
-	}
-
-	// TODO: (ref #1903) Allow for user supplied account sequence without
-	// automatically doing a manual lookup.
-	if txCtx.Sequence == 0 {
-		accSeq, err := cliCtx.GetAccountSequence(from)
-		if err != nil {
-			return err
-		}
-
-		txCtx = txCtx.WithSequence(accSeq)
-	}
-
-	if cliCtx.Gas == 0 {
+	autogas := cliCtx.DryRun || (cliCtx.Gas == 0)
+	if autogas {
 		txCtx, err = EnrichCtxWithGas(txCtx, cliCtx, cliCtx.FromAddressName, msgs)
 		if err != nil {
 			return err
 		}
+		fmt.Fprintf(os.Stdout, "estimated gas = %v\n", txCtx.Gas)
+	}
+	if cliCtx.DryRun {
+		return nil
 	}
 
 	passphrase, err := keys.GetPassphrase(cliCtx.FromAddressName)
@@ -75,14 +53,19 @@ func SendTx(txCtx authctx.TxContext, cliCtx context.CLIContext, msgs []sdk.Msg) 
 	return cliCtx.EnsureBroadcastTx(txBytes)
 }
 
+// SimulateMsgs simulates the transaction and returns the gas estimate and the adjusted value.
+func SimulateMsgs(txCtx authctx.TxContext, cliCtx context.CLIContext, name string, msgs []sdk.Msg, gas int64) (int64, int64, error) {
+	txBytes, err := txCtx.WithGas(gas).BuildWithPubKey(name, msgs)
+	if err != nil {
+		return 0, 0, err
+	}
+	return CalculateGas(cliCtx.Query, cliCtx.Codec, txBytes, cliCtx.GasAdjustment)
+}
+
 // EnrichCtxWithGas calculates the gas estimate that would be consumed by the
 // transaction and set the transaction's respective value accordingly.
 func EnrichCtxWithGas(txCtx authctx.TxContext, cliCtx context.CLIContext, name string, msgs []sdk.Msg) (authctx.TxContext, error) {
-	txBytes, err := txCtx.WithGas(0).BuildWithPubKey(name, msgs)
-	if err != nil {
-		return txCtx, err
-	}
-	_, adjusted, err := CalculateGas(cliCtx.Query, cliCtx.Codec, txBytes, cliCtx.GasAdjustment)
+	_, adjusted, err := SimulateMsgs(txCtx, cliCtx, name, msgs, 0)
 	if err != nil {
 		return txCtx, err
 	}
@@ -103,13 +86,12 @@ func CalculateGas(queryFunc func(string, common.HexBytes) ([]byte, error), cdc *
 		return
 	}
 	adjusted = adjustGasEstimate(estimate, adjustment)
-	fmt.Fprintf(os.Stderr, "gas: [estimated = %v] [adjusted = %v]\n", estimate, adjusted)
 	return
 }
 
 func adjustGasEstimate(estimate int64, adjustment float64) int64 {
 	if adjustment == 0 {
-		return int64(DefaultGasAdjustment * float64(estimate))
+		adjustment = DefaultGasAdjustment
 	}
 	return int64(adjustment * float64(estimate))
 }
@@ -120,4 +102,36 @@ func parseQueryResponse(cdc *amino.Codec, rawRes []byte) (int64, error) {
 		return 0, err
 	}
 	return simulationResult.GasUsed, nil
+}
+
+func prepareTxContext(txCtx authctx.TxContext, cliCtx context.CLIContext) (authctx.TxContext, error) {
+	if err := cliCtx.EnsureAccountExists(); err != nil {
+		return txCtx, err
+	}
+
+	from, err := cliCtx.GetFromAddress()
+	if err != nil {
+		return txCtx, err
+	}
+
+	// TODO: (ref #1903) Allow for user supplied account number without
+	// automatically doing a manual lookup.
+	if txCtx.AccountNumber == 0 {
+		accNum, err := cliCtx.GetAccountNumber(from)
+		if err != nil {
+			return txCtx, err
+		}
+		txCtx = txCtx.WithAccountNumber(accNum)
+	}
+
+	// TODO: (ref #1903) Allow for user supplied account sequence without
+	// automatically doing a manual lookup.
+	if txCtx.Sequence == 0 {
+		accSeq, err := cliCtx.GetAccountSequence(from)
+		if err != nil {
+			return txCtx, err
+		}
+		txCtx = txCtx.WithSequence(accSeq)
+	}
+	return txCtx, nil
 }

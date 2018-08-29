@@ -23,6 +23,7 @@ const (
 	FlagAsync         = "async"
 	FlagJson          = "json"
 	FlagPrintResponse = "print-response"
+	FlagDryRun        = "dry-run"
 )
 
 // LineBreak can be included in a command list to provide a blank line
@@ -58,6 +59,7 @@ func PostCommands(cmds ...*cobra.Command) []*cobra.Command {
 		c.Flags().Bool(FlagAsync, false, "broadcast transactions asynchronously")
 		c.Flags().Bool(FlagJson, false, "return output in json format")
 		c.Flags().Bool(FlagPrintResponse, true, "return tx response (only works with async = false)")
+		c.Flags().Bool(FlagDryRun, false, "no action; ignore the --gas flag and perform a simulation of a transaction, but don't broadcast it")
 	}
 	return cmds
 }
