@@ -7,7 +7,6 @@ import (
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	"github.com/cosmos/cosmos-sdk/types/msgservice"
 )
 
 // MaxGasWanted defines the max gas allowed.
@@ -24,22 +23,9 @@ func (t *Tx) GetMsgs() []sdk.Msg {
 	}
 
 	anys := t.Body.Messages
-	res := make([]sdk.Msg, len(anys))
-	for i, any := range anys {
-		var msg sdk.Msg
-		if msgservice.IsServiceMsg(any.TypeUrl) {
-			req := any.GetCachedValue()
-			if req == nil {
-				panic("Any cached value is nil. Transaction messages must be correctly packed Any values.")
-			}
-			msg = sdk.ServiceMsg{
-				MethodName: any.TypeUrl,
-				Request:    any.GetCachedValue().(sdk.MsgRequest),
-			}
-		} else {
-			msg = any.GetCachedValue().(sdk.Msg)
-		}
-		res[i] = msg
+	res, err := GetMsgs(anys, "transaction")
+	if err != nil {
+		panic(err)
 	}
 	return res
 }
@@ -111,9 +97,14 @@ func (t *Tx) GetSigners() []sdk.AccAddress {
 
 	for _, msg := range t.GetMsgs() {
 		for _, addr := range msg.GetSigners() {
-			if !seen[addr.String()] {
-				signers = append(signers, addr)
-				seen[addr.String()] = true
+			if !seen[addr] {
+				signer, err := sdk.AccAddressFromBech32(addr)
+				if err != nil {
+					panic(err)
+				}
+
+				signers = append(signers, signer)
+				seen[addr] = true
 			}
 		}
 	}
@@ -180,25 +171,7 @@ func (t *Tx) UnpackInterfaces(unpacker codectypes.AnyUnpacker) error {
 
 // UnpackInterfaces implements the UnpackInterfaceMessages.UnpackInterfaces method
 func (m *TxBody) UnpackInterfaces(unpacker codectypes.AnyUnpacker) error {
-	for _, any := range m.Messages {
-		// If the any's typeUrl contains 2 slashes, then we unpack the any into
-		// a ServiceMsg struct as per ADR-031.
-		if msgservice.IsServiceMsg(any.TypeUrl) {
-			var req sdk.MsgRequest
-			err := unpacker.UnpackAny(any, &req)
-			if err != nil {
-				return err
-			}
-		} else {
-			var msg sdk.Msg
-			err := unpacker.UnpackAny(any, &msg)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	return UnpackInterfaces(unpacker, m.Messages)
 }
 
 // UnpackInterfaces implements the UnpackInterfaceMessages.UnpackInterfaces method
@@ -221,4 +194,23 @@ func (m *SignerInfo) UnpackInterfaces(unpacker codectypes.AnyUnpacker) error {
 func RegisterInterfaces(registry codectypes.InterfaceRegistry) {
 	registry.RegisterInterface("cosmos.tx.v1beta1.Tx", (*sdk.Tx)(nil))
 	registry.RegisterImplementations((*sdk.Tx)(nil), &Tx{})
+}
+
+// ValidateMsg calls the `sdk.Msg.ValidateBasic()`
+// also validates all the signers are valid bech32 addresses.
+func ValidateMsg(msg sdk.Msg) error {
+	err := msg.ValidateBasic()
+	if err != nil {
+		return err
+	}
+
+	signers := msg.GetSigners()
+	for _, signer := range signers {
+		_, err = sdk.AccAddressFromBech32(signer)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

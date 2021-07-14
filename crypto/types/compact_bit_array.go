@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/bits"
 	"regexp"
 	"strings"
 )
@@ -54,7 +55,7 @@ func (bA *CompactBitArray) GetIndex(i int) bool {
 	if bA == nil {
 		return false
 	}
-	if i >= bA.Count() {
+	if i < 0 || i >= bA.Count() {
 		return false
 	}
 
@@ -68,7 +69,7 @@ func (bA *CompactBitArray) SetIndex(i int, v bool) bool {
 		return false
 	}
 
-	if i >= bA.Count() {
+	if i < 0 || i >= bA.Count() {
 		return false
 	}
 
@@ -85,23 +86,18 @@ func (bA *CompactBitArray) SetIndex(i int, v bool) bool {
 // given index. e.g. if bA = _XX__XX, NumOfTrueBitsBefore(4) = 2, since
 // there are two bits set to true before index 4.
 func (bA *CompactBitArray) NumTrueBitsBefore(index int) int {
-	numTrueValues := 0
+	onesCount := 0
 	max := bA.Count()
 	if index > max {
 		index = max
 	}
 	// below we iterate over the bytes then over bits (in low endian) and count bits set to 1
-	var i = 0
 	for elem := 0; ; elem++ {
-		for b := 7; b >= 0; b-- {
-			if i >= index {
-				return numTrueValues
-			}
-			i++
-			if (bA.Elems[elem]>>b)&1 == 1 {
-				numTrueValues++
-			}
+		if elem*8+7 >= index {
+			onesCount += bits.OnesCount8(bA.Elems[elem] >> (7 - (index % 8) + 1))
+			return onesCount
 		}
+		onesCount += bits.OnesCount8(bA.Elems[elem])
 	}
 }
 
@@ -262,6 +258,9 @@ func CompactUnmarshal(bz []byte) (*CompactBitArray, error) {
 	}
 
 	size, n := binary.Uvarint(bz)
+	if n < 0 || n >= len(bz) {
+		return nil, fmt.Errorf("compact bit array: n=%d is out of range of len(bz)=%d", n, len(bz))
+	}
 	bz = bz[n:]
 
 	if len(bz) != int(size+7)/8 {

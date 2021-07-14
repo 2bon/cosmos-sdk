@@ -7,11 +7,12 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
-	"github.com/cosmos/cosmos-sdk/x/auth/legacy/legacytx"
+	"github.com/cosmos/cosmos-sdk/x/auth/migrations/legacytx"
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 )
 
-// ValidateBasicDecorator will call tx.ValidateBasic and return any non-nil error.
+// ValidateBasicDecorator will call tx.ValidateBasic, ValidateMsg(for each msg inside tx)
+// and return any non-nil error.
 // If ValidateBasic passes, decorator calls next AnteHandler in chain. Note,
 // ValidateBasicDecorator decorator will not get executed on ReCheckTx since it
 // is not dependent on application state.
@@ -126,7 +127,7 @@ func (cgts ConsumeTxSizeGasDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, sim
 				PubKey:    pubkey,
 			}
 
-			sigBz := legacy.Cdc.MustMarshalBinaryBare(simSig)
+			sigBz := legacy.Cdc.MustMarshal(simSig)
 			cost := sdk.Gas(len(sigBz) + 6)
 
 			// If the pubkey is a multi-signature pubkey, then we estimate for the maximum
